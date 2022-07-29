@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/ethereum/go-ethereum/rlp/internal/rlpstruct"
+	"rlptest/rlp/internal/rlpstruct"
 )
 
 var (
@@ -56,13 +56,11 @@ func Encode(w io.Writer, val interface{}) error {
 	return buf.writeTo(w)
 }
 
-// EncodeToBytes returns the RLP encoding of val.
-// EncodeToBytes返回val的RLP编码。
-// Please see package-level documentation for the encoding rules.
-// 有关编码规则，请参阅包级文档。
+// 编码成字节数组
 func EncodeToBytes(val interface{}) ([]byte, error) {
 	//从encbufPool池中获取encbuf实例
 	buf := getEncBuffer()
+
 	// 调用结束以后重新放入池中
 	defer encBufferPool.Put(buf)
 
@@ -70,6 +68,7 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 	if err := buf.encode(val); err != nil {
 		return nil, err
 	}
+
 	//将编码后的数据和头部拼接成byte[]后返回
 	return buf.makeBytes(), nil
 }

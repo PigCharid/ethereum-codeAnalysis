@@ -24,7 +24,7 @@ func ExampleEncoder() {
 	bytes, _ := rlp.EncodeToBytes(t)
 	fmt.Printf("%v → %X\n", t, bytes)
 
-	t = &MyCoolType{Name: "foobar", a: 5, b: 6}
+	t = &MyCoolType{Name: "foobar", a: 2, b: 6}
 	bytes, _ = rlp.EncodeToBytes(t)
 	fmt.Printf("%v → %X\n", t, bytes)
 

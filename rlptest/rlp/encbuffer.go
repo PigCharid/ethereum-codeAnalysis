@@ -23,6 +23,7 @@ func getEncBuffer() *encBuffer {
 	// 断言赋值
 	buf := encBufferPool.Get().(*encBuffer)
 
+	// 初始化
 	buf.reset()
 	return buf
 }
@@ -177,6 +178,7 @@ func (buf *encBuffer) encode(val interface{}) error {
 	rval := reflect.ValueOf(val)
 	// 把值类型传入
 	writer, err := cachedWriter(rval.Type())
+
 	if err != nil {
 		return err
 	}

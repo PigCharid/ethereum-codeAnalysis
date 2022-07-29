@@ -6,7 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/rlp/internal/rlpstruct"
+	"rlptest/rlp/internal/rlpstruct"
 )
 
 // 如何根据类型找到对应的编码器和解码器
@@ -99,6 +99,9 @@ func (c *typeCache) generate(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 }
 
 func (c *typeCache) infoWhileGenerating(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
+	fmt.Println(typ)
+	fmt.Println(tags)
+
 	key := typekey{typ, tags}
 	if info := c.next[key]; info != nil {
 		return info
