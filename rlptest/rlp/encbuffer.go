@@ -1,6 +1,7 @@
 package rlp
 
 import (
+	"fmt"
 	"io"
 	"math/big"
 	"reflect"
@@ -174,14 +175,18 @@ func (buf *encBuffer) listEnd(index int) {
 }
 
 func (buf *encBuffer) encode(val interface{}) error {
+	fmt.Println("反射前的value: ", val)
 	//通过反射获取反射值
 	rval := reflect.ValueOf(val)
+	fmt.Println("反射valueof的value", rval)
 	// 把值类型传入
+	fmt.Println("反射的type: ", rval.Type())
 	writer, err := cachedWriter(rval.Type())
 
 	if err != nil {
 		return err
 	}
+	// 这里调用了编码器方法
 	return writer(rval, buf)
 }
 

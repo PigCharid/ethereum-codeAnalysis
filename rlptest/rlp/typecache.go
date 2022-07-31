@@ -56,6 +56,7 @@ func cachedDecoder(typ reflect.Type) (decoder, error) {
 }
 
 func cachedWriter(typ reflect.Type) (writer, error) {
+	fmt.Println("缓冲Typecashe: ", theTC)
 	info := theTC.info(typ)
 	return info.writer, info.writerErr
 }
@@ -68,9 +69,11 @@ func (c *typeCache) info(typ reflect.Type) *typeinfo {
 	if info := c.cur.Load().(map[typekey]*typeinfo)[key]; info != nil {
 		return info
 	}
-
+	fmt.Println("缓冲中没有string类型的编码器,下面去generate")
 	// Not in the cache, need to generate info for this type.
 	// 不在缓存中，需要生成此类型的信息。
+	fmt.Println("generate之前的type: ", typ)
+
 	return c.generate(typ, rlpstruct.Tags{})
 }
 
@@ -88,8 +91,9 @@ func (c *typeCache) generate(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 	for k, v := range cur {
 		c.next[k] = v
 	}
-
+	fmt.Println("存入缓冲前的typecache: ", c)
 	// Generate.
+	fmt.Println("创建map前的type和tags: ", typ, tags)
 	info := c.infoWhileGenerating(typ, tags)
 
 	// next -> cur
@@ -99,18 +103,16 @@ func (c *typeCache) generate(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 }
 
 func (c *typeCache) infoWhileGenerating(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
-	fmt.Println(typ)
-	fmt.Println(tags)
-
 	key := typekey{typ, tags}
 	if info := c.next[key]; info != nil {
 		return info
 	}
-	// Put a dummy value into the cache before generating.
-	// If the generator tries to lookup itself, it will get
-	// the dummy value and won't call itself recursively.
+
 	info := new(typeinfo)
 	c.next[key] = info
+	fmt.Println("1----当前typeinfo的值: ", info)
+	fmt.Println("存入key-value进入typecache以后的缓冲情况: ", c)
+
 	info.generate(typ, tags)
 	return info
 }
@@ -178,6 +180,7 @@ func (e structFieldError) Error() string {
 
 func (i *typeinfo) generate(typ reflect.Type, tags rlpstruct.Tags) {
 	i.decoder, i.decoderErr = makeDecoder(typ, tags)
+	// 设置编码器
 	i.writer, i.writerErr = makeWriter(typ, tags)
 }
 

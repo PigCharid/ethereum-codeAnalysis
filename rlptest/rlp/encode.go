@@ -65,6 +65,7 @@ func EncodeToBytes(val interface{}) ([]byte, error) {
 	defer encBufferPool.Put(buf)
 
 	// 对数据编码
+
 	if err := buf.encode(val); err != nil {
 		return nil, err
 	}
@@ -142,8 +143,11 @@ func makeWriter(typ reflect.Type, ts rlpstruct.Tags) (writer, error) {
 		return writeUint, nil
 	case kind == reflect.Bool:
 		return writeBool, nil
+
 	case kind == reflect.String:
+		fmt.Println("本次测试类型是string")
 		return writeString, nil
+
 	case kind == reflect.Slice && isByte(typ.Elem()):
 		return writeBytes, nil
 	case kind == reflect.Array && isByte(typ.Elem()):
@@ -240,15 +244,21 @@ func writeLengthOneByteArray(val reflect.Value, w *encBuffer) error {
 	return nil
 }
 
+// 这个编码string的函数会被返回作为typeinfo的编码器函数
 func writeString(val reflect.Value, w *encBuffer) error {
 	s := val.String()
+	fmt.Println("编码前的encBuffer: ", w)
+	fmt.Println("通过rval获取valye: ", s)
+	//编码规则？？
 	if len(s) == 1 && s[0] <= 0x7f {
 		// fits single byte, no string header
 		w.str = append(w.str, s[0])
 	} else {
+		fmt.Println("string数据的长度: ", len(s))
 		w.encodeStringHeader(len(s))
 		w.str = append(w.str, s...)
 	}
+	fmt.Println("编码后的encBuffer: ", w)
 	return nil
 }
 
