@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 )
 
-// a
+// b
 func TestStreamKind(t *testing.T) {
 	tests := []struct {
 		input    string
