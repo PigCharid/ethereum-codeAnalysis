@@ -61,7 +61,7 @@ func Encode(w io.Writer, val interface{}) error {
 // Please see package-level documentation for the encoding rules.
 // 有关编码规则，请参阅包级文档。
 func EncodeToBytes(val interface{}) ([]byte, error) {
-	//从encbufPool池中获取encbuf实例
+	//从encbufPool池中获取encbuf实例  这个地方目前还没看懂  暂时先研究编码
 	buf := getEncBuffer()
 	// 调用结束以后重新放入池中
 	defer encBufferPool.Put(buf)
@@ -126,35 +126,51 @@ func puthead(buf []byte, smalltag, largetag byte, size uint64) int {
 var encoderInterface = reflect.TypeOf(new(Encoder)).Elem()
 
 // makeWriter creates a writer function for the given type.
+// 通过所给的type和tag创建编码器
 func makeWriter(typ reflect.Type, ts rlpstruct.Tags) (writer, error) {
+	// 更加细致的分类
 	kind := typ.Kind()
 	switch {
 	case typ == rawValueType:
 		return writeRawValue, nil
+
 	case typ.AssignableTo(reflect.PtrTo(bigInt)):
 		return writeBigIntPtr, nil
+
 	case typ.AssignableTo(bigInt):
 		return writeBigIntNoPtr, nil
+
 	case kind == reflect.Ptr:
 		return makePtrWriter(typ, ts)
+
+	// 实现了encoder接口的类型
 	case reflect.PtrTo(typ).Implements(encoderInterface):
 		return makeEncoderWriter(typ), nil
+
 	case isUint(kind):
 		return writeUint, nil
+
 	case kind == reflect.Bool:
 		return writeBool, nil
+
 	case kind == reflect.String:
 		return writeString, nil
+
 	case kind == reflect.Slice && isByte(typ.Elem()):
 		return writeBytes, nil
+
 	case kind == reflect.Array && isByte(typ.Elem()):
 		return makeByteArrayWriter(typ), nil
+
 	case kind == reflect.Slice || kind == reflect.Array:
 		return makeSliceWriter(typ, ts)
+
 	case kind == reflect.Struct:
 		return makeStructWriter(typ)
+
 	case kind == reflect.Interface:
 		return writeInterface, nil
+
 	default:
 		return nil, fmt.Errorf("rlp: type %v is not RLP-serializable", typ)
 	}
@@ -379,7 +395,9 @@ func makePtrWriter(typ reflect.Type, ts rlpstruct.Tags) (writer, error) {
 }
 
 func makeEncoderWriter(typ reflect.Type) writer {
+	// 如果是实现encode接口类型
 	if typ.Implements(encoderInterface) {
+		// 返回一个和writer编码器一样的类型函数
 		return func(val reflect.Value, w *encBuffer) error {
 			return val.Interface().(Encoder).EncodeRLP(w)
 		}

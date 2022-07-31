@@ -26,7 +26,7 @@ type typeinfo struct {
 // typekey是typeCache中类型的键。它包括struct标记，因为它们可能生成不同的解码器。
 type typekey struct {
 	reflect.Type   //数据类型
-	rlpstruct.Tags //g根据tag可能会生成不同的解码器
+	rlpstruct.Tags //根据tag可能会生成不同的解码器
 }
 
 type decoder func(*Stream, reflect.Value) error
@@ -56,21 +56,25 @@ func cachedDecoder(typ reflect.Type) (decoder, error) {
 }
 
 func cachedWriter(typ reflect.Type) (writer, error) {
+	// 通过全局的Typecache对象去判断，返回一个什么样的编码器 全局的类型缓冲对象的作用，后面了解清楚
+	// typecache对象里面有一个map   typekey->typeinfo   typekey就是类型和tag  typeinfo就是编码解码器
 	info := theTC.info(typ)
 	return info.writer, info.writerErr
 }
 
+// 返回解码编码器对象
 func (c *typeCache) info(typ reflect.Type) *typeinfo {
-
+	// 封装一个type对象
 	key := typekey{Type: typ}
 
-	//好像是有对应的类型信息
+	// 看下缓冲的typecache对象中没有没这个typekey  对应的typeinfo 有的话就返回
 	if info := c.cur.Load().(map[typekey]*typeinfo)[key]; info != nil {
 		return info
 	}
 
 	// Not in the cache, need to generate info for this type.
 	// 不在缓存中，需要生成此类型的信息。
+	// 传入类型 和一个空的Tag对象
 	return c.generate(typ, rlpstruct.Tags{})
 }
 
@@ -78,12 +82,15 @@ func (c *typeCache) generate(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	// 载入缓冲池
 	cur := c.cur.Load().(map[typekey]*typeinfo)
+	// 再检查是否已经有了对应的key-value
 	if info := cur[typekey{typ, tags}]; info != nil {
 		return info
 	}
 
 	// Copy cur to next.
+	// 重新把全局的typecache赋值一遍
 	c.next = make(map[typekey]*typeinfo, len(cur)+1)
 	for k, v := range cur {
 		c.next[k] = v
@@ -100,14 +107,20 @@ func (c *typeCache) generate(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 
 func (c *typeCache) infoWhileGenerating(typ reflect.Type, tags rlpstruct.Tags) *typeinfo {
 	key := typekey{typ, tags}
+	// 继续检查缓冲池
 	if info := c.next[key]; info != nil {
 		return info
 	}
 	// Put a dummy value into the cache before generating.
 	// If the generator tries to lookup itself, it will get
 	// the dummy value and won't call itself recursively.
+	//在生成之前，将一个伪值放入缓存。如果生成器尝试查找自身，它将获得伪值，并且不会递归调用自身。
+	// 创建一个空的typeinfo
 	info := new(typeinfo)
+	// 存入map
 	c.next[key] = info
+
+	// 创建编码解码器
 	info.generate(typ, tags)
 	return info
 }
@@ -174,7 +187,9 @@ func (e structFieldError) Error() string {
 }
 
 func (i *typeinfo) generate(typ reflect.Type, tags rlpstruct.Tags) {
+	// 创建解码器
 	i.decoder, i.decoderErr = makeDecoder(typ, tags)
+	// 创建编码器
 	i.writer, i.writerErr = makeWriter(typ, tags)
 }
 

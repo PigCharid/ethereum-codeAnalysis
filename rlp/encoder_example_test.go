@@ -25,6 +25,7 @@ func ExampleEncoder() {
 	fmt.Printf("%v → %X\n", t, bytes)
 
 	t = &MyCoolType{Name: "foobar", a: 5, b: 6}
+	// 进行编码
 	bytes, _ = rlp.EncodeToBytes(t)
 	fmt.Printf("%v → %X\n", t, bytes)
 

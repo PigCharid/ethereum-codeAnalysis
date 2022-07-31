@@ -174,8 +174,10 @@ func (buf *encBuffer) listEnd(index int) {
 
 func (buf *encBuffer) encode(val interface{}) error {
 	//通过反射获取反射值
+	// 本来的这个value值是{"foobar",5,6}
+	// 到这里就变成了{"foobar",5,6} [5.6]  为什么还没搞明白
 	rval := reflect.ValueOf(val)
-	// 把值类型传入
+	// 把值类型传入  返回writer对象  注意：这是一个函数类型对象 这里传过去的是类型
 	writer, err := cachedWriter(rval.Type())
 	if err != nil {
 		return err
