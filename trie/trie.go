@@ -40,22 +40,32 @@ var (
 type LeafCallback func(paths [][]byte, hexpath []byte, leaf []byte, parent common.Hash) error
 
 // Trie is a Merkle Patricia Trie.
+// Trie是Merkle Patricia Trie。
 // The zero value is an empty trie with no database.
+// 零值是没有数据库的空trie。
 // Use New to create a trie that sits on top of a database.
-//
+// 使用New创建位于数据库顶部的trie。
 // Trie is not safe for concurrent use.
+// 同时使用Trie是不安全的。
 type Trie struct {
-	db    *Database
-	root  node
+	// 用levelDB做KV存储
+	db *Database
+
+	//当前根节点
+	root node
+
+	//启动加载的时候的hash值，通过这个hash值可以在数据库里面恢复出整颗的trie树
 	owner common.Hash
 
 	// Keep track of the number leaves which have been inserted since the last
 	// hashing operation. This number will not directly map to the number of
 	// actually unhashed nodes
+	// 跟踪自上次哈希操作以来插入的叶数。该数字不会直接映射到实际未剪切节点的数量
 	unhashed int
 
 	// tracer is the state diff tracer can be used to track newly added/deleted
 	// trie node. It will be reset after each commit operation.
+	//跟踪器是状态差异跟踪器，可用于跟踪新添加/删除的trie节点。它将在每次提交操作后重置。
 	tracer *tracer
 }
 
@@ -77,11 +87,16 @@ func (t *Trie) Copy() *Trie {
 
 // New creates a trie with an existing root node from db and an assigned
 // owner for storage proximity.
-//
+// New使用db中的现有根节点和为存储邻近性分配的所有者创建trie。
+
 // If root is the zero hash or the sha3 hash of an empty string, the
 // trie is initially empty and does not require a database. Otherwise,
 // New will panic if db is nil and returns a MissingNodeError if root does
 // not exist in the database. Accessing the trie loads nodes from db on demand.
+
+// 如果root是空字符串的零散列或sha3散列，则trie最初为空，不需要数据库。
+// 否则，如果db为nil，New将死机，如果数据库中不存在根，则返回MissingNodeError。访问trie会根据需要从db加载节点。
+// 数据库存在的话，如果传入的root为真实的不为空，那从数据库根据root恢复trie  否则以ower创建一个新的trie
 func New(owner common.Hash, root common.Hash, db *Database) (*Trie, error) {
 	return newTrie(owner, root, db)
 }
@@ -104,21 +119,28 @@ func newWithRootNode(root node) *Trie {
 
 // newTrie is the internal function used to construct the trie with given parameters.
 func newTrie(owner common.Hash, root common.Hash, db *Database) (*Trie, error) {
+
 	if db == nil {
 		panic("trie.New called without a database")
 	}
+
 	trie := &Trie{
 		db:    db,
 		owner: owner,
 		//tracer: newTracer(),
 	}
+
+	// 如果hash不是空值并且不是emptyRoot，从数据库中加载一个已经存在的树
 	if root != (common.Hash{}) && root != emptyRoot {
+		// 这里的trie.resolveHash就是加载整课树的方法
 		rootnode, err := trie.resolveHash(root[:], nil)
 		if err != nil {
 			return nil, err
 		}
+		// 设置trie的根节点为从数据库中恢复出来的根节点
 		trie.root = rootnode
 	}
+	//否则直接返回新建一个树
 	return trie, nil
 }
 
@@ -130,7 +152,12 @@ func (t *Trie) NodeIterator(start []byte) NodeIterator {
 
 // Get returns the value for key stored in the trie.
 // The value bytes must not be modified by the caller.
+// et返回存储在trie中的键的值
+// 调用者不得修改值字节
+
+// 传入节点key  获得存在trie的value值
 func (t *Trie) Get(key []byte) []byte {
+
 	res, err := t.TryGet(key)
 	if err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
@@ -141,6 +168,10 @@ func (t *Trie) Get(key []byte) []byte {
 // TryGet returns the value for key stored in the trie.
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
+// TryGet返回存储在trie中的键的值
+// 调用者不得修改值字节
+// 如果在数据库中未找到节点，则返回MissingNodeError
+
 func (t *Trie) TryGet(key []byte) ([]byte, error) {
 	value, newroot, didResolve, err := t.tryGet(t.root, keybytesToHex(key), 0)
 	if err == nil && didResolve {
@@ -149,6 +180,7 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 	return value, err
 }
 
+// 根据root遍历MPT节点
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
 	switch n := (origNode).(type) {
 	case nil:
@@ -156,17 +188,22 @@ func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode
 	case valueNode:
 		return n, n, false, nil
 	case *shortNode:
+		// key不存在
 		if len(key)-pos < len(n.Key) || !bytes.Equal(n.Key, key[pos:pos+len(n.Key)]) {
 			// key not found in trie
 			return nil, n, false, nil
 		}
+		// 递归遍历
 		value, newnode, didResolve, err = t.tryGet(n.Val, key, pos+len(n.Key))
+
 		if err == nil && didResolve {
 			n = n.copy()
 			n.Val = newnode
 		}
 		return value, n, didResolve, err
+
 	case *fullNode:
+		// 递归遍历
 		value, newnode, didResolve, err = t.tryGet(n.Children[key[pos]], key, pos+1)
 		if err == nil && didResolve {
 			n = n.copy()
@@ -290,15 +327,30 @@ func (t *Trie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
 // stored in the trie.
 //
 // If a node was not found in the database, a MissingNodeError is returned.
+
+//TryUpdate将键与trie中的值相关联。对Get的后续调用将返回值。如果值的长度为零，则从trie中删除任何现有值，并且对Get的调用将返回nil。
+//
+//值字节存储在trie中时，调用者不得修改它们。
+//
+//如果在数据库中未找到节点，则返回MissingNodeError。
+
 func (t *Trie) TryUpdate(key, value []byte) error {
+	// 记录操作次数
 	t.unhashed++
 	k := keybytesToHex(key)
+	fmt.Println("数据更新到trie的key对应的hex编码: ", k)
+	// value的值长度不为0的话则为插入,为0的话为删除
 	if len(value) != 0 {
+		fmt.Println("空trie添加数据前的根节点: ", t.root)
+		fmt.Println("即将插入的数据的key的hex: ", k)
+		fmt.Println("即将插入的数据的value: ", valueNode(value))
 		_, n, err := t.insert(t.root, nil, k, valueNode(value))
+		fmt.Println("数据插入tire以后返回的节点", n)
 		if err != nil {
 			return err
 		}
 		t.root = n
+		fmt.Println("插入完成以后的根节点: ", t.root)
 	} else {
 		_, n, err := t.delete(t.root, nil, k)
 		if err != nil {
@@ -309,19 +361,39 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 	return nil
 }
 
+/*
+	insert	MPT树节点的插入操作
+	node	要插入哪个节点
+	prefix	当前已处理完的key(节点共有的前缀)
+	key		当前未处理的key(完整key = prefix + key)
+	value	当前插入的值
+
+	bool	返回函数是否改变了MPT树
+	node	执行插入后的MPT树根节点
+*/
+//  是在向节点n插入节点value
 func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error) {
+	// key的长度为0
 	if len(key) == 0 {
+		// 如果是数据节点的话
 		if v, ok := n.(valueNode); ok {
+
 			return !bytes.Equal(v, value.(valueNode)), value, nil
 		}
+		// 不是数据节点的话
 		return true, value, nil
 	}
+
+	// 判断是那种类型的节点
 	switch n := n.(type) {
 	case *shortNode:
+		// 如果是叶子节点，首先计算共有前缀长度
 		matchlen := prefixLen(key, n.Key)
 		// If the whole key matches, keep this short node as is
 		// and only update the value.
+		// 如果相同key的长度正好等于及诶单的key长度  说明节点已经存在  只更新节点的value即可
 		if matchlen == len(n.Key) {
+			// 递归
 			dirty, nn, err := t.insert(n.Val, append(prefix, key[:matchlen]...), key[matchlen:], value)
 			if !dirty || err != nil {
 				return false, n, err
@@ -329,17 +401,22 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 			return true, &shortNode{n.Key, nn, t.newFlag()}, nil
 		}
 		// Otherwise branch out at the index where they differ.
+		// 构造形成一个分支节点(fullNode)
 		branch := &fullNode{flags: t.newFlag()}
 		var err error
+
+		// 将原来的节点拆作新的后缀shortNode插入
 		_, branch.Children[n.Key[matchlen]], err = t.insert(nil, append(prefix, n.Key[:matchlen+1]...), n.Key[matchlen+1:], n.Val)
 		if err != nil {
 			return false, nil, err
 		}
+		//将新节点作为shortNode插入
 		_, branch.Children[key[matchlen]], err = t.insert(nil, append(prefix, key[:matchlen+1]...), key[matchlen+1:], value)
 		if err != nil {
 			return false, nil, err
 		}
 		// Replace this shortNode with the branch if it occurs at index 0.
+		// 如果没有共有的前缀，则新建的分支节点为根节点
 		if matchlen == 0 {
 			return true, branch, nil
 		}
@@ -349,9 +426,11 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 		t.tracer.onInsert(append(prefix, key[:matchlen]...))
 
 		// Replace it with a short node leading up to the branch.
+		// 如果有共有的前缀，则拆分原节点产生前缀叶子节点为根节点   把前缀弄成根节点  然后指向branch
 		return true, &shortNode{key[:matchlen], branch, t.newFlag()}, nil
 
 	case *fullNode:
+		// 若果是分支节点，则直接将新数据插入作为子节点
 		dirty, nn, err := t.insert(n.Children[key[0]], append(prefix, key[0]), key[1:], value)
 		if !dirty || err != nil {
 			return false, n, err
@@ -362,21 +441,26 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 		return true, n, nil
 
 	case nil:
+
 		// New short node is created and track it in the tracer. The node identifier
 		// passed is the path from the root node. Note the valueNode won't be tracked
 		// since it's always embedded in its parent.
-		t.tracer.onInsert(prefix)
 
+		// 创建新的短节点并在跟踪器中跟踪它。传递的节点标识符是来自根节点的路径。注意，不会跟踪valueNode，因为它始终嵌入在其父节点中
+		// 像一个空节点插入节点，就是返回一个shortnode
+		t.tracer.onInsert(prefix)
 		return true, &shortNode{key, value, t.newFlag()}, nil
 
 	case hashNode:
 		// We've hit a part of the trie that isn't loaded yet. Load
 		// the node and insert into it. This leaves all child nodes on
 		// the path to the value in the trie.
+		// 哈希节点 表示当前节点还未加载到内存中，首先需要调用resolveHash从数据库中加载节点
 		rn, err := t.resolveHash(n, prefix)
 		if err != nil {
 			return false, nil, err
 		}
+		// 然后在该节点后插入新节点
 		dirty, nn, err := t.insert(rn, prefix, key, value)
 		if !dirty || err != nil {
 			return false, rn, err
@@ -558,6 +642,7 @@ func (t *Trie) resolve(n node, prefix []byte) (node, error) {
 
 func (t *Trie) resolveHash(n hashNode, prefix []byte) (node, error) {
 	hash := common.BytesToHash(n)
+	//通过hash从db中取出node的RLP编码内容
 	if node := t.db.node(hash); node != nil {
 		return node, nil
 	}
@@ -575,6 +660,7 @@ func (t *Trie) resolveBlob(n hashNode, prefix []byte) ([]byte, error) {
 
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.
+// 哈希返回trie的根哈希。它不会写入数据库，即使trie没有数据库，也可以使用它。
 func (t *Trie) Hash() common.Hash {
 	hash, cached, _ := t.hashRoot()
 	t.root = cached
@@ -583,18 +669,26 @@ func (t *Trie) Hash() common.Hash {
 
 // Commit writes all nodes to the trie's memory database, tracking the internal
 // and external (for account tries) references.
+// 提交将所有节点写入trie的内存数据库，跟踪内部和外部（用于帐户尝试）引用
+// 序列化MPT树，并将所有节点数据存储到数据库中
 func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
+	// 没数据库
 	if t.db == nil {
 		panic("commit called on trie with nil database")
 	}
 	defer t.tracer.reset()
 
+	// 没有根节点  就是空的trie
 	if t.root == nil {
 		return emptyRoot, 0, nil
 	}
 	// Derive the hash for all dirty nodes first. We hold the assumption
 	// in the following procedure that all nodes are hashed.
+	// 首先导出所有脏节点的哈希，我们在下面的过程中假设所有节点都是散列的
+	// 这个是在获取根Hash
 	rootHash := t.Hash()
+	// 先去看下怎么获取到这个根hash
+
 	h := newCommitter()
 	defer returnCommitterToPool(h)
 
@@ -634,13 +728,18 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 }
 
 // hashRoot calculates the root hash of the given trie
+// hashRoot计算给定trie的根哈希
+// 折叠MPT节点的实现
 func (t *Trie) hashRoot() (node, node, error) {
+	// 空的根节点 返回空根节点的对应的hash()
 	if t.root == nil {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	// If the number of changes is below 100, we let one thread handle it
+	// 如果更改的数量低于100，我们让一个线程处理它
 	h := newHasher(t.unhashed >= 100)
 	defer returnHasherToPool(h)
+
 	hashed, cached := h.hash(t.root, true)
 	t.unhashed = 0
 	return hashed, cached, nil

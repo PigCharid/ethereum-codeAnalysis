@@ -56,14 +56,27 @@ func returnHasherToPool(h *hasher) {
 
 // hash collapses a node down into a hash node, also returning a copy of the
 // original node initialized with the computed hash to replace the original one.
+// 散列将节点向下折叠为散列节点，还返回用计算的散列初始化的原始节点的副本以替换原始节点。
+/*
+	node	MPT根节点
+	force	true 当节点的RLP字节长度小于32也对节点的RLP进行hash计算
+			根节点调用为true以保证对根节点进行哈希计算
+	return:
+	node	入参n经过哈希折叠后的hashNode
+	node	hashNode被赋值了的同时未被哈希折叠的入参n
+*/
+// 将节点进行哈希
 func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 	// Return the cached hash if it's available
+	// 返回缓存的哈希（如果可用）
 	if hash, _ := n.cache(); hash != nil {
 		return hash, n
 	}
 	// Trie not processed yet, walk the children
+	// 看根节点的类型fullNode和shortNode不同操作
 	switch n := n.(type) {
 	case *shortNode:
+		// 将所有子节点替换成他们的Hash
 		collapsed, cached := h.hashShortNodeChildren(n)
 		hashed := h.shortnodeToHash(collapsed, force)
 		// We need to retain the possibly _not_ hashed node, in case it was too
@@ -92,16 +105,24 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 // hashShortNodeChildren collapses the short node. The returned collapsed node
 // holds a live reference to the Key, and must not be modified.
 // The cached
+// hashShortNodeChildren折叠短节点。返回的折叠节点包含对键的活动引用，不能修改。
+// 缓存的
 func (h *hasher) hashShortNodeChildren(n *shortNode) (collapsed, cached *shortNode) {
 	// Hash the short node's child, caching the newly hashed subtree
+	// 散列短节点的子节点，缓存新散列的子树
 	collapsed, cached = n.copy(), n.copy()
 	// Previously, we did copy this one. We don't seem to need to actually
 	// do that, since we don't overwrite/reuse keys
 	//cached.Key = common.CopyBytes(n.Key)
+	//之前，我们复制了这个。我们似乎不需要真正做到这一点，因为我们不会覆盖/重用缓存的密钥。Key=common.CopyBytes（n.Key）
+	// key从hex编码转化成compact编码
 	collapsed.Key = hexToCompact(n.Key)
 	// Unless the child is a valuenode or hashnode, hash it
+	// 除非子节点是valuenode或hashnode，否则对其进行哈希
 	switch n.Val.(type) {
 	case *fullNode, *shortNode:
+		// 又是在递归
+		// 但是 节点的value
 		collapsed.Val, cached.Val = h.hash(n.Val, false)
 	}
 	return collapsed, cached

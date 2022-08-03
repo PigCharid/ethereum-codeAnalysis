@@ -32,8 +32,27 @@ func init() {
 
 // Used for testing
 func newEmpty() *Trie {
+	//
 	trie := NewEmpty(NewDatabase(memorydb.New()))
 	return trie
+}
+func TestInsert(t *testing.T) {
+	trie := newEmpty()
+	updateString(trie, "A", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	fmt.Println("插入一个key-value的trie: ", trie)
+	//exp := common.HexToHash("d23786fb4a010da3ce639d66d5e904a11dbc02746d1ce25029e53290cabf28ab")
+	_, _, err := trie.Commit(nil)
+	if err != nil {
+		t.Fatalf("commit error: %v", err)
+	}
+	// fmt.Println(root)
+	// fmt.Println(c)
+	// if root != exp {
+	// 	t.Errorf("case 2: exp %x got %x", exp, root)
+	// }
+}
+func updateString(trie *Trie, k, v string) {
+	trie.Update([]byte(k), []byte(v))
 }
 
 func TestEmptyTrie(t *testing.T) {
@@ -137,32 +156,6 @@ func testMissingNode(t *testing.T, memonly bool) {
 	err = trie.TryDelete([]byte("123456"))
 	if _, ok := err.(*MissingNodeError); !ok {
 		t.Errorf("Wrong error: %v", err)
-	}
-}
-
-func TestInsert(t *testing.T) {
-	trie := newEmpty()
-
-	updateString(trie, "doe", "reindeer")
-	updateString(trie, "dog", "puppy")
-	updateString(trie, "dogglesworth", "cat")
-
-	exp := common.HexToHash("8aad789dff2f538bca5d8ea56e8abe10f4c7ba3a5dea95fea4cd6e7c3a1168d3")
-	root := trie.Hash()
-	if root != exp {
-		t.Errorf("case 1: exp %x got %x", exp, root)
-	}
-
-	trie = newEmpty()
-	updateString(trie, "A", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-
-	exp = common.HexToHash("d23786fb4a010da3ce639d66d5e904a11dbc02746d1ce25029e53290cabf28ab")
-	root, _, err := trie.Commit(nil)
-	if err != nil {
-		t.Fatalf("commit error: %v", err)
-	}
-	if root != exp {
-		t.Errorf("case 2: exp %x got %x", exp, root)
 	}
 }
 
@@ -1109,10 +1102,6 @@ func tempDB(tb testing.TB) *Database {
 
 func getString(trie *Trie, k string) []byte {
 	return trie.Get([]byte(k))
-}
-
-func updateString(trie *Trie, k, v string) {
-	trie.Update([]byte(k), []byte(v))
 }
 
 func deleteString(trie *Trie, k string) {

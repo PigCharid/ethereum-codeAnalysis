@@ -11,23 +11,35 @@ import (
 
 var indices = []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f", "[17]"}
 
+// 节点接口 下面四种节点类型全部实现了该接口
 type node interface {
 	cache() (hashNode, bool)
 	encode(w rlp.EncoderBuffer)
 	fstring(string) string
 }
 
+// 四种节点的类型的定义
 type (
+	// trie结构的分支节点
+	// fullNode -> 分支节点，它有一个容量为17的node数组成员变量Children，数组中前16个空位分别对应16进制(hex)下的0-9a-f，
+	// 这样对于每个子节点，根据其key值16进制形式下的第一位的值，就可挂载到Children数组的某个位置，fullNode本身不再需要额外key变量；
+	// Children数组的第17位，留给该fullNode的数据部分。这和我们上面说的Branch 分支节点的规格一致的。
 	fullNode struct {
-		Children [17]node // Actual trie node data to encode/decode (needs custom encoder)
+		Children [17]node
 		flags    nodeFlag
 	}
+	// shortNode，key是一个任意长度的字符串(字节数组[]byte)，体现了PatriciaTrie的特点，通过合并只有一个子节点的父节点和其子节点来缩短trie的深度，结果就是有些节点会有长度更长的key。
+	// trie结构里面的叶子节点和扩展节点  通过Val字段判断是否为叶子节点还是扩展节点
+	// 叶子节点的话  value的值为rlp编码
+	// 扩展节点的话  value指向分支或者叶子节点
 	shortNode struct {
 		Key   []byte
 		Val   node
 		flags nodeFlag
 	}
-	hashNode  []byte
+	// 节点哈希，用于实现节点的折叠(参考MerkleTree设计特点)
+	hashNode []byte
+	// MPT的叶子节点  最后一层 存储数据
 	valueNode []byte
 )
 
@@ -47,8 +59,8 @@ func (n *shortNode) copy() *shortNode { copy := *n; return &copy }
 
 // nodeFlag contains caching-related metadata about a node.
 type nodeFlag struct {
-	hash  hashNode // cached hash of the node (may be nil)
-	dirty bool     // whether the node has changes that must be written to the database
+	hash  hashNode // 节点的hash值
+	dirty bool     // 脏位，标志数据是否正确
 }
 
 func (n *fullNode) cache() (hashNode, bool)  { return n.flags.hash, n.flags.dirty }
@@ -92,6 +104,7 @@ func mustDecodeNode(hash, buf []byte) node {
 }
 
 // decodeNode parses the RLP encoding of a trie node.
+// decodeNode解析trie节点的RLP编码。
 func decodeNode(hash, buf []byte) (node, error) {
 	if len(buf) == 0 {
 		return nil, io.ErrUnexpectedEOF

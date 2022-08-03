@@ -18,14 +18,17 @@ package trie
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+// 创建一个分支节点
 func newTestFullNode(v []byte) []interface{} {
 	fullNodeData := []interface{}{}
 	for i := 0; i < 16; i++ {
+		// 返回32个[]byte{byte(i + 1)} 串联的新切片
 		k := bytes.Repeat([]byte{byte(i + 1)}, 32)
 		fullNodeData = append(fullNodeData, k)
 	}
@@ -35,20 +38,29 @@ func newTestFullNode(v []byte) []interface{} {
 
 func TestDecodeNestedNode(t *testing.T) {
 	fullNodeData := newTestFullNode([]byte("fullnode"))
+	fmt.Println("创建完的全节点", fullNodeData)
 
 	data := [][]byte{}
+
+	// 设置16个空切片
 	for i := 0; i < 16; i++ {
 		data = append(data, nil)
 	}
+
 	data = append(data, []byte("subnode"))
+	fmt.Println(data)
 	fullNodeData[15] = data
+
+	fmt.Println(fullNodeData...)
 
 	buf := bytes.NewBuffer([]byte{})
 	rlp.Encode(buf, fullNodeData)
+	fmt.Println("buf数据", buf.Bytes())
 
-	if _, err := decodeNode([]byte("testdecode"), buf.Bytes()); err != nil {
-		t.Fatalf("decode nested full node err: %v", err)
-	}
+	node, _ := decodeNode([]byte("testdecode"), buf.Bytes())
+
+	fmt.Println(node)
+
 }
 
 func TestDecodeFullNodeWrongSizeChild(t *testing.T) {
@@ -87,8 +99,6 @@ func TestDecodeFullNode(t *testing.T) {
 	buf := bytes.NewBuffer([]byte{})
 	rlp.Encode(buf, fullNodeData)
 
-	_, err := decodeNode([]byte("testdecode"), buf.Bytes())
-	if err != nil {
-		t.Fatalf("decode full node err: %v", err)
-	}
+	node, _ := decodeNode([]byte("testdecode"), buf.Bytes())
+	fmt.Println(node)
 }
