@@ -338,12 +338,10 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 	// 记录操作次数
 	t.unhashed++
 	k := keybytesToHex(key)
-	fmt.Println("数据更新到trie的key对应的hex编码: ", k)
+	fmt.Printf("数据更新到trie的key对应的hex编码:%X\n", k)
 	// value的值长度不为0的话则为插入,为0的话为删除
 	if len(value) != 0 {
-		fmt.Println("空trie添加数据前的根节点: ", t.root)
-		fmt.Println("即将插入的数据的key的hex: ", k)
-		fmt.Println("即将插入的数据的value: ", valueNode(value))
+		fmt.Println("添加数据前的根节点: ", t.root)
 		_, n, err := t.insert(t.root, nil, k, valueNode(value))
 		fmt.Println("数据插入tire以后返回的节点", n)
 		if err != nil {
@@ -351,6 +349,7 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 		}
 		t.root = n
 		fmt.Println("插入完成以后的根节点: ", t.root)
+		fmt.Println("插入下一条数据:----------------------------")
 	} else {
 		_, n, err := t.delete(t.root, nil, k)
 		if err != nil {
@@ -660,10 +659,12 @@ func (t *Trie) resolveBlob(n hashNode, prefix []byte) ([]byte, error) {
 
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.
-// 哈希返回trie的根哈希。它不会写入数据库，即使trie没有数据库，也可以使用它。
+// 返回trie的根哈希。它不会写入数据库，即使trie没有数据库，也可以使用它。
 func (t *Trie) Hash() common.Hash {
+	// 返回两个node 一个是根hash  一个是带有根hash的cached 这个会被赋值给trie的根节点
 	hash, cached, _ := t.hashRoot()
 	t.root = cached
+	// 返回固定长度的[]byte格式
 	return common.BytesToHash(hash.(hashNode))
 }
 
@@ -685,16 +686,21 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 	// Derive the hash for all dirty nodes first. We hold the assumption
 	// in the following procedure that all nodes are hashed.
 	// 首先导出所有脏节点的哈希，我们在下面的过程中假设所有节点都是散列的
-	// 这个是在获取根Hash
-	rootHash := t.Hash()
-	// 先去看下怎么获取到这个根hash
 
+	fmt.Println("目前的根节点: ", t.root)
+	// 递归获取根hash
+	rootHash := t.Hash()
+	fmt.Println("获取到的根hash: ", rootHash)
+
+	// 提交对象 好像是这么做可以回滚
 	h := newCommitter()
 	defer returnCommitterToPool(h)
 
 	// Do a quick check if we really need to commit, before we spin
 	// up goroutines. This can happen e.g. if we load a trie for reading storage
 	// values, but don't write to it.
+	// 在启动goroutines之前，快速检查是否确实需要提交。这可能发生，例如，如果我们加载一个trie来读取存储值，但不向其写入。
+	// 这里的判断就是不需要提交
 	if hashedNode, dirty := t.root.cache(); !dirty {
 		// Replace the root node with the origin hash in order to
 		// ensure all resolved nodes are dropped after the commit.
@@ -702,6 +708,8 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 		return rootHash, 0, nil
 	}
 	var wg sync.WaitGroup
+
+	// 回滚操作？  onleaf这是个函数对象
 	if onleaf != nil {
 		h.onleaf = onleaf
 		h.leafCh = make(chan *leaf, leafChanSize)
@@ -711,7 +719,11 @@ func (t *Trie) Commit(onleaf LeafCallback) (common.Hash, int, error) {
 			h.commitLoop(t.db)
 		}()
 	}
+	// 这里应该是真正的提交数据库的操作
+	fmt.Println("目前的根节点: ", t.root)
+
 	newRoot, committed, err := h.Commit(t.root, t.db)
+
 	if onleaf != nil {
 		// The leafch is created in newCommitter if there was an onleaf callback
 		// provided. The commitLoop only _reads_ from it, and the commit
@@ -738,9 +750,13 @@ func (t *Trie) hashRoot() (node, node, error) {
 	// If the number of changes is below 100, we let one thread handle it
 	// 如果更改的数量低于100，我们让一个线程处理它
 	h := newHasher(t.unhashed >= 100)
+
 	defer returnHasherToPool(h)
 
+	// 往下去求hash 传入根节点
 	hashed, cached := h.hash(t.root, true)
+
+	// 未取hash的节点数量
 	t.unhashed = 0
 	return hashed, cached, nil
 }

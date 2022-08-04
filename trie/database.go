@@ -1,19 +1,3 @@
-// Copyright 2018 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package trie
 
 import (
@@ -309,17 +293,23 @@ func (db *Database) DiskDB() ethdb.KeyValueStore {
 // The blob size must be specified to allow proper size tracking.
 // All nodes inserted by this function will be reference tracked
 // and in theory should only used for **trie nodes** insertion.
+//insert将折叠的trie节点插入内存数据库。
+//必须指定blob大小以允许正确的大小跟踪。
+//通过该函数插入的所有节点都将被引用跟踪，理论上只能用于**trie节点**插入。
 func (db *Database) insert(hash common.Hash, size int, node node) {
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
 	// If the node's already cached, skip
+	// 如果节点已缓存，请跳过
 	if _, ok := db.dirties[hash]; ok {
 		return
 	}
+
 	memcacheDirtyWriteMeter.Mark(int64(size))
 
 	// Create the cached entry for this node
+	//为此节点创建缓存项
 	entry := &cachedNode{
 		node:      simplifyNode(node),
 		size:      uint16(size),
@@ -333,6 +323,7 @@ func (db *Database) insert(hash common.Hash, size int, node node) {
 	db.dirties[hash] = entry
 
 	// Update the flush-list endpoints
+	// 更新刷新列表端点
 	if db.oldest == (common.Hash{}) {
 		db.oldest, db.newest = hash, hash
 	} else {

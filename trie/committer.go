@@ -66,10 +66,14 @@ func returnCommitterToPool(h *committer) {
 
 // Commit collapses a node down into a hash node and inserts it into the database
 func (c *committer) Commit(n node, db *Database) (hashNode, int, error) {
+
 	if db == nil {
 		return nil, 0, errors.New("no db provided")
 	}
+
+	// 节点存入数据库
 	h, committed, err := c.commit(n, db)
+
 	if err != nil {
 		return nil, 0, err
 	}
@@ -77,36 +81,48 @@ func (c *committer) Commit(n node, db *Database) (hashNode, int, error) {
 }
 
 // commit collapses a node down into a hash node and inserts it into the database
+// 提交将节点向下折叠为哈希节点，并将其插入数据库
 func (c *committer) commit(n node, db *Database) (node, int, error) {
 	// if this path is clean, use available cached data
 	hash, dirty := n.cache()
+	// dirty为true   这种情况不用插入数据库
 	if hash != nil && !dirty {
 		return hash, 0, nil
 	}
 	// Commit children, then parent, and remove the dirty flag.
+	// 提交子级，然后提交父级，并删除脏标志。
 	switch cn := n.(type) {
 	case *shortNode:
+		fmt.Println("要提交的节点是shortNode")
 		// Commit child
 		collapsed := cn.copy()
-
 		// If the child is fullNode, recursively commit,
 		// otherwise it can only be hashNode or valueNode.
+		//如果子节点是fullNode，则递归提交，否则只能是hashNode或valueNode。
 		var childCommitted int
 		if _, ok := cn.Val.(*fullNode); ok {
+
 			childV, committed, err := c.commit(cn.Val, db)
 			if err != nil {
 				return nil, 0, err
 			}
 			collapsed.Val, childCommitted = childV, committed
 		}
+
 		// The key needs to be copied, since we're delivering it to database
 		collapsed.Key = hexToCompact(cn.Key)
+		// 下面这一步会把key是compact编码的shortNode存到db中去
+		// 没有去hash值的node是不会存的
 		hashedNode := c.store(collapsed, db)
+		fmt.Println("shortNode节点通过store返回的hashNide: ", hashedNode)
+		// 如果转为hash了的话才执行下面的
 		if hn, ok := hashedNode.(hashNode); ok {
 			return hn, childCommitted + 1, nil
 		}
+		// 存成功以后返回
 		return collapsed, childCommitted, nil
 	case *fullNode:
+		fmt.Println("要提交的节点是fullNode")
 		hashedKids, childCommitted, err := c.commitChildren(cn, db)
 		if err != nil {
 			return nil, 0, err
@@ -128,6 +144,7 @@ func (c *committer) commit(n node, db *Database) (node, int, error) {
 }
 
 // commitChildren commits the children of the given fullnode
+// commitChildren提交给定fullnode的子节点
 func (c *committer) commitChildren(n *fullNode, db *Database) ([17]node, int, error) {
 	var (
 		committed int
@@ -172,6 +189,7 @@ func (c *committer) store(n node, db *Database) node {
 		size    int
 	)
 	if hash == nil {
+		fmt.Println("走到这里")
 		// This was not generated - must be a small node stored in the parent.
 		// In theory, we should apply the leafCall here if it's not nil(embedded
 		// node usually contains value). But small value(less than 32bytes) is
@@ -193,6 +211,7 @@ func (c *committer) store(n node, db *Database) node {
 	} else if db != nil {
 		// No leaf-callback used, but there's still a database. Do serial
 		// insertion
+		fmt.Println("通过这里存根hash")
 		db.insert(common.BytesToHash(hash), size, n)
 	}
 	return hash
@@ -230,6 +249,8 @@ func (c *committer) commitLoop(db *Database) {
 // rlp-encoding it (zero allocs). This method has been experimentally tried, and with a trie
 // with 1000 leafs, the only errors above 1% are on small shortnodes, where this
 // method overestimates by 2 or 3 bytes (e.g. 37 instead of 35)
+//estimateSize估计rlp编码节点的大小，而不实际进行rlp编码（零allocs）。这种方法已经在实验中进行了尝试，
+// 对于具有1000个叶子的trie，只有在小的短节点上，误差超过1%，其中该方法高估了2或3个字节（例如，37而不是35）
 func estimateSize(n node) int {
 	switch n := n.(type) {
 	case *shortNode:

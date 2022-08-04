@@ -38,8 +38,8 @@ func newEmpty() *Trie {
 }
 func TestInsert(t *testing.T) {
 	trie := newEmpty()
-	updateString(trie, "A", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-	fmt.Println("插入一个key-value的trie: ", trie)
+	updateString(trie, "10001", "a")
+	updateString(trie, "10101", "b")
 	//exp := common.HexToHash("d23786fb4a010da3ce639d66d5e904a11dbc02746d1ce25029e53290cabf28ab")
 	_, _, err := trie.Commit(nil)
 	if err != nil {
@@ -52,6 +52,7 @@ func TestInsert(t *testing.T) {
 	// }
 }
 func updateString(trie *Trie, k, v string) {
+	fmt.Println("插入的数据key的字节数组: ", []byte(k), "-------插入数据的value的字节数组: ", []byte(v))
 	trie.Update([]byte(k), []byte(v))
 }
 

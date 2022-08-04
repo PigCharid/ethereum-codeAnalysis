@@ -17,6 +17,7 @@
 package trie
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -59,8 +60,7 @@ func returnHasherToPool(h *hasher) {
 // 散列将节点向下折叠为散列节点，还返回用计算的散列初始化的原始节点的副本以替换原始节点。
 /*
 	node	MPT根节点
-	force	true 当节点的RLP字节长度小于32也对节点的RLP进行hash计算
-			根节点调用为true以保证对根节点进行哈希计算
+	force	根节点调用为true以保证对根节点进行哈希计算
 	return:
 	node	入参n经过哈希折叠后的hashNode
 	node	hashNode被赋值了的同时未被哈希折叠的入参n
@@ -68,7 +68,7 @@ func returnHasherToPool(h *hasher) {
 // 将节点进行哈希
 func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 	// Return the cached hash if it's available
-	// 返回缓存的哈希（如果可用）
+	// 返回缓存的哈希（如果缓存中有）
 	if hash, _ := n.cache(); hash != nil {
 		return hash, n
 	}
@@ -77,10 +77,14 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 	switch n := n.(type) {
 	case *shortNode:
 		// 将所有子节点替换成他们的Hash
+		fmt.Println("该节点为shortNode")
+		// 获得是compact编码下的node   我就用了两个数据   其实这里可能涉及到trie的折叠
 		collapsed, cached := h.hashShortNodeChildren(n)
+		// 获得到折叠的node后对其取hash
 		hashed := h.shortnodeToHash(collapsed, force)
 		// We need to retain the possibly _not_ hashed node, in case it was too
 		// small to be hashed
+		// 如果对node真正取hash了的话，就把cached的falg里面设置hash
 		if hn, ok := hashed.(hashNode); ok {
 			cached.flags.hash = hn
 		} else {
@@ -88,6 +92,8 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 		}
 		return hashed, cached
 	case *fullNode:
+		fmt.Println("该节点为fullNode")
+		// 分支节点处理子节点
 		collapsed, cached := h.hashFullNodeChildren(n)
 		hashed = h.fullnodeToHash(collapsed, force)
 		if hn, ok := hashed.(hashNode); ok {
@@ -95,6 +101,7 @@ func (h *hasher) hash(n node, force bool) (hashed node, cached node) {
 		} else {
 			cached.flags.hash = nil
 		}
+		// 返回hash和缓存的node
 		return hashed, cached
 	default:
 		// Value and hash nodes don't have children so they're left as were
@@ -123,15 +130,21 @@ func (h *hasher) hashShortNodeChildren(n *shortNode) (collapsed, cached *shortNo
 	case *fullNode, *shortNode:
 		// 又是在递归
 		// 但是 节点的value
+		fmt.Println("该节点有子节点,进行递归")
+		// 递归的node不需要取hash,传入的false
 		collapsed.Val, cached.Val = h.hash(n.Val, false)
+
 	}
+	// 回返key为compact编码的node
 	return collapsed, cached
 }
 
 func (h *hasher) hashFullNodeChildren(n *fullNode) (collapsed *fullNode, cached *fullNode) {
 	// Hash the full node's children, caching the newly hashed subtrees
+	// 散列整个节点的子节点，缓存新散列的子树
 	cached = n.copy()
 	collapsed = n.copy()
+
 	if h.parallel {
 		var wg sync.WaitGroup
 		wg.Add(16)
@@ -164,12 +177,13 @@ func (h *hasher) hashFullNodeChildren(n *fullNode) (collapsed *fullNode, cached 
 // should have hex-type Key, which will be converted (without modification)
 // into compact form for RLP encoding.
 // If the rlp data is smaller than 32 bytes, `nil` is returned.
+// shortnodeToHash从shortNode创建hashNode。提供的shortnode应具有十六进制类型的密钥，该密钥将被转换（无需修改）为紧凑形式，用于RLP编码。如果rlp数据小于32字节，则返回“nil”。
 func (h *hasher) shortnodeToHash(n *shortNode, force bool) node {
 	n.encode(h.encbuf)
 	enc := h.encodedBytes()
 
 	if len(enc) < 32 && !force {
-		return n // Nodes smaller than 32 bytes are stored inside their parent
+		return n //小于32字节的节点存储在其父节点中
 	}
 	return h.hashData(enc)
 }
